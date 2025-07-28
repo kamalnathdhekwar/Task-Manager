@@ -1,19 +1,43 @@
-const tasks = require("./routes/tasks");
-const connection = require("./db");
-const cors = require("cors");
-const express = require("express");
+import cors from "cors";
+import dotenv from "dotenv";
+dotenv.config();
+import express from "express";
+import mongoose from "mongoose";
+import todoRoute from "../backend/routes/todo.route.js";
+import userRoute from "../backend/routes/user.route.js";
+import cookieParser from "cookie-parser";
 const app = express();
 
-connection();
+ 
+const PORT = process.env.PORT || 4003;
+const DB_URI = "mongodb://localhost:27017/todo-app";
 
+// middlewares
 app.use(express.json());
-app.use(cors());
-
-app.get('/ok', (req, res) => {
-    res.status(200).send('ok')
+app.use(cookieParser());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+    methods: "GET,POST,PUT,DELETE",
+    allowedHeaders: ["Content-Type", "Authorization"], // Add other headers you want to allow here.
   })
+);
 
-app.use("/api/tasks", tasks);
+// Database connection code
 
-const port = process.env.PORT || 3500;
-app.listen(port, () => console.log(`Listening on port ${port}...`));
+console.log("MONGODB_URI =", process.env.MONGODB_URI); 
+try {
+  await mongoose.connect(DB_URI);
+  console.log("Connected to MongoDB");
+} catch (error) {
+  console.log(error);
+}
+
+// routes
+app.use("/todo", todoRoute);
+app.use("/user", userRoute);
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
