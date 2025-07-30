@@ -1,28 +1,18 @@
 {
-  "name": "backend",
+  "name": "task-manager-backend",
   "version": "1.0.0",
-  "description": "Full Stack To-Do App",
-  "main": "index.js",
+  "main": "server.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon index.js"
+    "start": "node server.js"
   },
-  "keywords": [
-    "MERN",
-    "Project"
-  ],
-  "author": "Akhil K",
-  "license": "ISC",
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "dotenv": "^16.6.1",
-    "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.16.5",
-    "nodemon": "^3.1.10",
-    "zod": "^3.25.76"
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "mongoose": "^7.6.1",
+    "task-management-application": "file:.."
   }
 }
