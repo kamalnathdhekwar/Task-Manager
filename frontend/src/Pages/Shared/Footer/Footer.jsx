@@ -12,9 +12,9 @@ const Footer = () => {
       } px-2`}
     >
       <p className="text-xs text-center">
-        Copyright &copy; 2025 All Rights Reserved by Task Management
+        Copyright &copy; 2023 All Rights Reserved by Task Management
       </p>
-      <p className="text-xs text-center">Developed by Kamlanath Dhekwar</p>
+      <p className="text-xs text-center">Developed by Md. Al Amin Islam</p>
     </div>
   );
 };
