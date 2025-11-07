@@ -1,20 +1,15 @@
-# Use official Node.js image as the base
-FROM node:20-alpine
-
+# frontend/Dockerfile
+# 1) Build
+FROM node:20-alpine AS build
 WORKDIR /app
-
-# Install dependencies
 COPY package*.json ./
-RUN npm install
-
-# Copy the rest of the application code
+RUN npm ci
 COPY . .
-
-# Build the app for production
 RUN npm run build
 
-# Expose port (Vite preview default is 4173)
-EXPOSE 4173
-
-# Start the production preview server
-CMD ["npm", "run", "dev"]
+# 2) Run (nginx)
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+# Optional: set base path, caching, etc.
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
