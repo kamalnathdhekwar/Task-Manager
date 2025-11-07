@@ -17,7 +17,6 @@ const Home = () => {
       <div className={`text-center py-4 px-2 space-y-2 `}>
         <h2 className="text-xl lg:text-2xl font-semibold">
           Welcome to Your Task Management Application!
-          checking for ci
         </h2>
         <p className="text-sm md:text-base lg:text-lg">
           We are thrilled to have you here. Let's get started and make your
