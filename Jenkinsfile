@@ -8,15 +8,19 @@ pipeline {
     }
 
     stages {
-        stage('Clone Repository') {
+        stage('Checkout Code') {
             steps {
-                git 'https://github.com/<your-username>/<your-repo>.git'
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[url: 'https://github.com/kamalnathdhekwar/Task-Manager.git']]
+                ])
             }
         }
 
         stage('Build Docker Images') {
             steps {
                 script {
+                    sh 'ls -R'  // 👈 Debug: shows files Jenkins sees
                     sh 'docker build -t $BACKEND_IMAGE ./backend'
                     sh 'docker build -t $FRONTEND_IMAGE ./frontend'
                 }
