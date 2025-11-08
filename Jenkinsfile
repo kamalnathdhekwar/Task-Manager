@@ -20,7 +20,7 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv('sonar-server') {
                     sh '''
                         sonar-scanner \
                         -Dsonar.projectKey=task-manager \
