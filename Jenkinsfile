@@ -47,11 +47,18 @@ pipeline {
             steps {
                 script {
                     sh '''
-                    mkdir -p trivy-reports
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                      -v $(pwd)/trivy-reports:/root/.cache/ aquasec/trivy image $BACKEND_IMAGE --format table --output trivy-reports/backend-report.txt
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                      -v $(pwd)/trivy-reports:/root/.cache/ aquasec/trivy image $FRONTEND_IMAGE --format table --output trivy-reports/frontend-report.txt
+                    mkdir -p $WORKSPACE/trivy-reports
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v $WORKSPACE/trivy-reports:/reports \
+                      aquasec/trivy image $BACKEND_IMAGE \
+                      --format table --output /reports/backend-report.txt
+
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v $WORKSPACE/trivy-reports:/reports \
+                      aquasec/trivy image $FRONTEND_IMAGE \
+                      --format table --output /reports/frontend-report.txt
                     '''
                 }
             }
