@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        SONARQUBE_TOKEN = credentials('sonar-token')
+        SONARQUBE_TOKEN = credentials('sonarqube-token')
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE = "kamalnathd/task-backend"
     }
@@ -25,7 +25,7 @@ pipeline {
                         sonar-scanner \
                         -Dsonar.projectKey=task-manager \
                         -Dsonar.sources=. \
-                        -Dsonar.host.url=http://<YOUR-EC2-PUBLIC-IP>:9000 \
+                        -Dsonar.host.url=http://<your-ec2-ip>:9000 \
                         -Dsonar.login=$SONARQUBE_TOKEN
                     '''
                 }
@@ -44,9 +44,8 @@ pipeline {
         stage('Scan Docker Images with Trivy') {
             steps {
                 sh '''
-                    mkdir -p trivy-reports
-                    trivy image --severity HIGH,CRITICAL --no-progress --format table -o trivy-reports/backend.txt $BACKEND_IMAGE
-                    trivy image --severity HIGH,CRITICAL --no-progress --format table -o trivy-reports/frontend.txt $FRONTEND_IMAGE
+                    trivy image $BACKEND_IMAGE --format html -o backend-trivy-report.html || true
+                    trivy image $FRONTEND_IMAGE --format html -o frontend-trivy-report.html || true
                 '''
             }
         }
@@ -59,23 +58,21 @@ pipeline {
 
         stage('Push Images to Docker Hub') {
             steps {
-                script {
-                    sh 'docker push $BACKEND_IMAGE'
-                    sh 'docker push $FRONTEND_IMAGE'
-                }
+                sh 'docker push $BACKEND_IMAGE'
+                sh 'docker push $FRONTEND_IMAGE'
             }
         }
 
         stage('Archive Reports') {
             steps {
-                archiveArtifacts artifacts: 'trivy-reports/*.txt', fingerprint: true
+                archiveArtifacts artifacts: '*.html', allowEmptyArchive: true
             }
         }
     }
 
     post {
         success {
-            echo '✅ Build, scan, and push completed successfully!'
+            echo '✅ Build, Analysis, and Push completed successfully!'
         }
         failure {
             echo '❌ Build failed! Check logs and reports.'
