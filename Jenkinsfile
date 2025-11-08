@@ -25,7 +25,7 @@ pipeline {
                         sonar-scanner \
                         -Dsonar.projectKey=task-manager \
                         -Dsonar.sources=. \
-                        -Dsonar.host.url=http://<your-ec2-ip>:9000 \
+                        -Dsonar.host.url=http://http://3.145.50.62:9000 \
                         -Dsonar.login=$SONARQUBE_TOKEN
                     '''
                 }
