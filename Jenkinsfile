@@ -3,6 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+        SONARQUBE_TOKEN = credentials('sonar-token')
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE = "kamalnathd/task-backend"
     }
@@ -17,6 +18,20 @@ pipeline {
             }
         }
 
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        sonar-scanner \
+                        -Dsonar.projectKey=task-manager \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=http://<YOUR-EC2-PUBLIC-IP>:9000 \
+                        -Dsonar.login=$SONARQUBE_TOKEN
+                    '''
+                }
+            }
+        }
+
         stage('Build Docker Images') {
             steps {
                 script {
@@ -26,19 +41,13 @@ pipeline {
             }
         }
 
-        stage('Scan with Trivy') {
+        stage('Scan Docker Images with Trivy') {
             steps {
-                script {
-                    sh '''
-                    echo "🔍 Scanning Backend Image with Trivy..."
-                    trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress $BACKEND_IMAGE > trivy-backend-report.txt
-
-                    echo "🔍 Scanning Frontend Image with Trivy..."
-                    trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress $FRONTEND_IMAGE > trivy-frontend-report.txt
-
-                    echo "✅ Trivy scan completed. Reports generated."
-                    '''
-                }
+                sh '''
+                    mkdir -p trivy-reports
+                    trivy image --severity HIGH,CRITICAL --no-progress --format table -o trivy-reports/backend.txt $BACKEND_IMAGE
+                    trivy image --severity HIGH,CRITICAL --no-progress --format table -o trivy-reports/frontend.txt $FRONTEND_IMAGE
+                '''
             }
         }
 
@@ -56,18 +65,20 @@ pipeline {
                 }
             }
         }
+
+        stage('Archive Reports') {
+            steps {
+                archiveArtifacts artifacts: 'trivy-reports/*.txt', fingerprint: true
+            }
+        }
     }
 
     post {
-        always {
-            echo "📄 Archiving Trivy scan reports..."
-            archiveArtifacts artifacts: 'trivy-*.txt', allowEmptyArchive: true
-        }
         success {
-            echo '✅ Docker images built, scanned, and pushed successfully!'
+            echo '✅ Build, scan, and push completed successfully!'
         }
         failure {
-            echo '❌ Build failed! Check logs.'
+            echo '❌ Build failed! Check logs and reports.'
         }
     }
 }
