@@ -8,9 +8,12 @@ pipeline {
     }
 
     stages {
-        stage('Clone Repository') {
+        stage('Checkout Code') {
             steps {
-                git 'https://github.com/kamalnathdhekwar/Task-Manager.git'
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[url: 'https://github.com/kamalnathdhekwar/Task-Manager.git']]
+                ])
             }
         }
 
@@ -23,19 +26,17 @@ pipeline {
             }
         }
 
-        stage('Scan Docker Images with Trivy') {
+        stage('Scan with Trivy') {
             steps {
                 script {
-                    // Scan backend image
                     sh '''
-                    echo "🔍 Scanning backend image..."
-                    trivy image --exit-code 1 --severity HIGH,CRITICAL $BACKEND_IMAGE || true
-                    '''
+                    echo "🔍 Scanning Backend Image with Trivy..."
+                    trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress $BACKEND_IMAGE > trivy-backend-report.txt
 
-                    // Scan frontend image
-                    sh '''
-                    echo "🔍 Scanning frontend image..."
-                    trivy image --exit-code 1 --severity HIGH,CRITICAL $FRONTEND_IMAGE || true
+                    echo "🔍 Scanning Frontend Image with Trivy..."
+                    trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress $FRONTEND_IMAGE > trivy-frontend-report.txt
+
+                    echo "✅ Trivy scan completed. Reports generated."
                     '''
                 }
             }
@@ -58,6 +59,10 @@ pipeline {
     }
 
     post {
+        always {
+            echo "📄 Archiving Trivy scan reports..."
+            archiveArtifacts artifacts: 'trivy-*.txt', allowEmptyArchive: true
+        }
         success {
             echo '✅ Docker images built, scanned, and pushed successfully!'
         }
