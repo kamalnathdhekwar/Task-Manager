@@ -2,85 +2,98 @@ pipeline {
     agent any
 
     environment {
+        // Jenkins credentials IDs (create them in Jenkins > Manage Credentials)
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         SONARQUBE_TOKEN = credentials('sonar-token')
+
+        // Image names
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
-        BACKEND_IMAGE = "kamalnathd/task-backend"
+        BACKEND_IMAGE  = "kamalnathd/task-backend"
+
+        // SonarQube Server URL (replace with your EC2 public IP)
+        SONAR_HOST_URL = "http://<your-ec2-ip>:9000"
     }
 
     stages {
         stage('Checkout Code') {
             steps {
+                echo "📦 Checking out source code..."
                 checkout([$class: 'GitSCM',
                     branches: [[name: '*/main']],
-                    userRemoteConfigs: [[url: 'https://github.com/kamalnathdhekwar/Task-Manager.git']]
+                    userRemoteConfigs: [[url: 'https://github.com/your-repo/task-manager.git']]
                 ])
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                script {
-                    sh '''
+                echo "🔍 Running SonarQube code analysis..."
+                sh '''
                     docker run --rm \
-                      -e SONAR_HOST_URL="http://3.145.50.62:9000" \
-                      -e SONAR_TOKEN="$SONARQUBE_TOKEN" \
+                      -e SONAR_HOST_URL=$SONAR_HOST_URL \
+                      -e SONAR_TOKEN=$SONARQUBE_TOKEN \
                       -v "$(pwd)":/usr/src \
                       sonarsource/sonar-scanner-cli \
                       -Dsonar.projectKey=task-manager \
-                      -Dsonar.sources=.
-                    '''
-                }
+                      -Dsonar.sources=. \
+                      -Dsonar.exclusions=trivy-reports/**
+                '''
             }
         }
 
         stage('Build Docker Images') {
             steps {
-                script {
-                    sh 'docker build -t $BACKEND_IMAGE ./backend'
-                    sh 'docker build -t $FRONTEND_IMAGE ./frontend'
-                }
+                echo "🐳 Building Docker images..."
+                sh '''
+                    docker build -t $BACKEND_IMAGE:latest ./backend
+                    docker build -t $FRONTEND_IMAGE:latest ./frontend
+                '''
             }
         }
 
         stage('Scan Docker Images with Trivy') {
             steps {
-                script {
-                    sh '''
-                    mkdir -p $WORKSPACE/trivy-reports
+                echo "🧪 Scanning Docker images with Trivy..."
+                sh '''
+                    mkdir -p trivy-reports
+
                     docker run --rm \
                       -v /var/run/docker.sock:/var/run/docker.sock \
                       -v $WORKSPACE/trivy-reports:/reports \
-                      aquasec/trivy image $BACKEND_IMAGE \
+                      aquasec/trivy image $BACKEND_IMAGE:latest \
                       --format table --output /reports/backend-report.txt
 
                     docker run --rm \
                       -v /var/run/docker.sock:/var/run/docker.sock \
                       -v $WORKSPACE/trivy-reports:/reports \
-                      aquasec/trivy image $FRONTEND_IMAGE \
+                      aquasec/trivy image $FRONTEND_IMAGE:latest \
                       --format table --output /reports/frontend-report.txt
-                    '''
-                }
+                '''
             }
         }
 
         stage('Login to Docker Hub') {
             steps {
-                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                echo "🔐 Logging in to Docker Hub..."
+                sh '''
+                    echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin
+                '''
             }
         }
 
         stage('Push Images to Docker Hub') {
             steps {
-                script {
-                    sh 'docker push $BACKEND_IMAGE'
-                    sh 'docker push $FRONTEND_IMAGE'
-                }
+                echo "☁️ Pushing images to Docker Hub..."
+                sh '''
+                    docker push $BACKEND_IMAGE:latest
+                    docker push $FRONTEND_IMAGE:latest
+                '''
             }
         }
 
         stage('Archive Reports') {
             steps {
+                echo "📄 Archiving Trivy reports..."
                 archiveArtifacts artifacts: 'trivy-reports/*.txt', fingerprint: true
             }
         }
@@ -91,7 +104,7 @@ pipeline {
             echo '✅ Build, scan, and push completed successfully!'
         }
         failure {
-            echo '❌ Pipeline failed! Check logs and reports.'
+            echo '❌ Pipeline failed! Check logs and reports for details.'
         }
     }
 }
