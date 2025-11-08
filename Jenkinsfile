@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        SONARQUBE_TOKEN = credentials('sonarqube-token')
+        SONARQUBE_TOKEN = credentials('sonar-token')
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE = "kamalnathd/task-backend"
     }
