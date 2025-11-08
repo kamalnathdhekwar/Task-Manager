@@ -2,16 +2,16 @@ pipeline {
     agent any
 
     environment {
-        // Jenkins credentials IDs (create them in Jenkins > Manage Credentials)
+        // Jenkins credentials IDs (create in Jenkins > Manage Credentials)
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         SONARQUBE_TOKEN = credentials('sonar-token')
 
-        // Image names
+        // Docker images
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE  = "kamalnathd/task-backend"
 
-        // SonarQube Server URL (replace with your EC2 public IP)
-        SONAR_HOST_URL = "http://<your-ec2-ip>:9000"
+        // SonarQube server
+        SONAR_HOST_URL = "http://3.145.50.62:9000"
     }
 
     stages {
@@ -20,14 +20,14 @@ pipeline {
                 echo "📦 Checking out source code..."
                 checkout([$class: 'GitSCM',
                     branches: [[name: '*/main']],
-                    userRemoteConfigs: [[url: 'https://github.com/your-repo/task-manager.git']]
+                    userRemoteConfigs: [[url: 'https://github.com/kamalnathdhekwar/Task-Manager.git']]
                 ])
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                echo "🔍 Running SonarQube code analysis..."
+                echo "🔍 Running SonarQube analysis..."
                 sh '''
                     docker run --rm \
                       -e SONAR_HOST_URL=$SONAR_HOST_URL \
