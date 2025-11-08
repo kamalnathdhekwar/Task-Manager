@@ -8,21 +8,35 @@ pipeline {
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Clone Repository') {
             steps {
-                checkout([$class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[url: 'https://github.com/kamalnathdhekwar/Task-Manager.git']]
-                ])
+                git 'https://github.com/kamalnathdhekwar/Task-Manager.git'
             }
         }
 
         stage('Build Docker Images') {
             steps {
                 script {
-                    sh 'ls -R'  // 👈 Debug: shows files Jenkins sees
                     sh 'docker build -t $BACKEND_IMAGE ./backend'
                     sh 'docker build -t $FRONTEND_IMAGE ./frontend'
+                }
+            }
+        }
+
+        stage('Scan Docker Images with Trivy') {
+            steps {
+                script {
+                    // Scan backend image
+                    sh '''
+                    echo "🔍 Scanning backend image..."
+                    trivy image --exit-code 1 --severity HIGH,CRITICAL $BACKEND_IMAGE || true
+                    '''
+
+                    // Scan frontend image
+                    sh '''
+                    echo "🔍 Scanning frontend image..."
+                    trivy image --exit-code 1 --severity HIGH,CRITICAL $FRONTEND_IMAGE || true
+                    '''
                 }
             }
         }
@@ -45,12 +59,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Docker images built and pushed successfully!'
+            echo '✅ Docker images built, scanned, and pushed successfully!'
         }
         failure {
             echo '❌ Build failed! Check logs.'
         }
     }
 }
-
-
