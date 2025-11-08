@@ -20,13 +20,15 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonar-server') {
+                script {
                     sh '''
-                        sonar-scanner \
-                        -Dsonar.projectKey=task-manager \
-                        -Dsonar.sources=. \
-                        -Dsonar.host.url=http://3.145.50.62:9000 \
-                        -Dsonar.login=$SONARQUBE_TOKEN
+                    docker run --rm \
+                      -e SONAR_HOST_URL="http://3.145.50.62:9000" \
+                      -e SONAR_TOKEN="$SONARQUBE_TOKEN" \
+                      -v "$(pwd)":/usr/src \
+                      sonarsource/sonar-scanner-cli \
+                      -Dsonar.projectKey=task-manager \
+                      -Dsonar.sources=.
                     '''
                 }
             }
@@ -43,10 +45,15 @@ pipeline {
 
         stage('Scan Docker Images with Trivy') {
             steps {
-                sh '''
-                    trivy image $BACKEND_IMAGE --format html -o backend-trivy-report.html || true
-                    trivy image $FRONTEND_IMAGE --format html -o frontend-trivy-report.html || true
-                '''
+                script {
+                    sh '''
+                    mkdir -p trivy-reports
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v $(pwd)/trivy-reports:/root/.cache/ aquasec/trivy image $BACKEND_IMAGE --format table --output trivy-reports/backend-report.txt
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v $(pwd)/trivy-reports:/root/.cache/ aquasec/trivy image $FRONTEND_IMAGE --format table --output trivy-reports/frontend-report.txt
+                    '''
+                }
             }
         }
 
@@ -58,24 +65,26 @@ pipeline {
 
         stage('Push Images to Docker Hub') {
             steps {
-                sh 'docker push $BACKEND_IMAGE'
-                sh 'docker push $FRONTEND_IMAGE'
+                script {
+                    sh 'docker push $BACKEND_IMAGE'
+                    sh 'docker push $FRONTEND_IMAGE'
+                }
             }
         }
 
         stage('Archive Reports') {
             steps {
-                archiveArtifacts artifacts: '*.html', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'trivy-reports/*.txt', fingerprint: true
             }
         }
     }
 
     post {
         success {
-            echo '✅ Build, Analysis, and Push completed successfully!'
+            echo '✅ Build, scan, and push completed successfully!'
         }
         failure {
-            echo '❌ Build failed! Check logs and reports.'
+            echo '❌ Pipeline failed! Check logs and reports.'
         }
     }
 }
