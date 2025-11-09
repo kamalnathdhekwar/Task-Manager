@@ -11,7 +11,7 @@ pipeline {
         BACKEND_IMAGE  = "kamalnathd/task-backend"
 
         // SonarQube server
-        SONAR_HOST_URL = "http://3.145.50.62:9000"
+        SONAR_HOST_URL = "http://3.138.138.214:9000"
     }
 
     stages {
