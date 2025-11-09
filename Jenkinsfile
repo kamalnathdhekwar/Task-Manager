@@ -2,16 +2,12 @@ pipeline {
     agent any
 
     environment {
-        // Jenkins credentials IDs (create in Jenkins > Manage Credentials)
+        // Jenkins credentials IDs
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        SONARQUBE_TOKEN = credentials('sonar-token')
 
         // Docker images
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE  = "kamalnathd/task-backend"
-
-        // SonarQube server
-        SONAR_HOST_URL = "http://3.138.138.214:9000"
     }
 
     stages {
@@ -24,26 +20,6 @@ pipeline {
                 ])
             }
         }
-
-        stage('SonarQube Analysis') {
-    steps {
-        echo "🔍 Running SonarQube analysis..."
-        sh '''
-            echo "Cleaning up old Trivy reports..."
-            sudo rm -rf trivy-reports || true
-
-            docker run --rm \
-              -e SONAR_HOST_URL=$SONAR_HOST_URL \
-              -e SONAR_TOKEN=$SONARQUBE_TOKEN \
-              -v "$(pwd)":/usr/src \
-              sonarsource/sonar-scanner-cli \
-              -Dsonar.projectKey=task-manager \
-              -Dsonar.sources=. \
-              -Dsonar.exclusions=trivy-reports/**,**/node_modules/**,**/fanal/**,**/.git/**
-        '''
-    }
-}
-
 
         stage('Build Docker Images') {
             steps {
