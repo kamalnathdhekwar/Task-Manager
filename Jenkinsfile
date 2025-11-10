@@ -1,14 +1,9 @@
 pipeline {
-    agent {
-        docker {
-            image 'hashicorp/terraform:1.9.8' // Terraform + Linux base image
-            args '-u root:root -v /var/run/docker.sock:/var/run/docker.sock' // for Docker access
-        }
-    }
+    agent any
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        AWS_CREDENTIALS = credentials('aws-credentials') // Jenkins AWS creds ID
+        AWS_CREDENTIALS = credentials('aws-credentials')
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE  = "kamalnathd/task-backend"
         CLUSTER_NAME   = "task-management-cluster"
@@ -26,6 +21,28 @@ pipeline {
             }
         }
 
+        stage('Install Dependencies') {
+            steps {
+                echo "⚙️ Installing Terraform, AWS CLI, and kubectl..."
+                sh '''
+                    if ! command -v terraform &> /dev/null; then
+                        curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+                        sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+                        sudo apt-get update && sudo apt-get install -y terraform
+                    fi
+                    
+                    if ! command -v aws &> /dev/null; then
+                        sudo apt-get install -y awscli
+                    fi
+
+                    if ! command -v kubectl &> /dev/null; then
+                        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+                    fi
+                '''
+            }
+        }
+
         stage('Terraform Init & Apply (EKS Infra)') {
             steps {
                 echo "🏗️ Setting up EKS infrastructure..."
@@ -40,12 +57,12 @@ pipeline {
 
         stage('Configure AWS & EKS') {
             steps {
-                echo "⚙️ Configuring AWS and EKS cluster access..."
+                echo "⚙️ Configuring AWS access and EKS kubeconfig..."
                 sh '''
-                    apk add --no-cache aws-cli kubectl docker-cli bash curl
                     aws configure set aws_access_key_id $AWS_CREDENTIALS_USR
                     aws configure set aws_secret_access_key $AWS_CREDENTIALS_PSW
                     aws configure set default.region $AWS_REGION
+
                     aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
                 '''
             }
@@ -67,20 +84,22 @@ pipeline {
                 sh '''
                     mkdir -p trivy-reports
 
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v $WORKSPACE/trivy-reports:/reports \
-                        aquasec/trivy image $BACKEND_IMAGE:latest \
-                        --format table --output /reports/backend-report.txt
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v $WORKSPACE/trivy-reports:/reports \
+                      aquasec/trivy image $BACKEND_IMAGE:latest \
+                      --format table --output /reports/backend-report.txt
 
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v $WORKSPACE/trivy-reports:/reports \
-                        aquasec/trivy image $FRONTEND_IMAGE:latest \
-                        --format table --output /reports/frontend-report.txt
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v $WORKSPACE/trivy-reports:/reports \
+                      aquasec/trivy image $FRONTEND_IMAGE:latest \
+                      --format table --output /reports/frontend-report.txt
                 '''
             }
         }
 
-        stage('Login to Docker Hub & Push Images') {
+        stage('Login & Push to Docker Hub') {
             steps {
                 echo "☁️ Pushing images to Docker Hub..."
                 sh '''
@@ -101,7 +120,6 @@ pipeline {
                     kubectl apply -f frontend-deployment.yaml
                     kubectl apply -f frontend-service.yaml
 
-                    echo "✅ Deployment Completed!"
                     kubectl get pods -o wide
                     kubectl get svc -o wide
                 '''
