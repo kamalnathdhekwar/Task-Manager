@@ -2,12 +2,17 @@ pipeline {
     agent any
 
     environment {
+        // Credentials
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         AWS_CREDENTIALS = credentials('aws-credentials')
+
+        // Docker images
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE  = "kamalnathd/task-backend"
-        CLUSTER_NAME   = "task-management-cluster"
-        AWS_REGION     = "us-east-2"
+
+        // EKS
+        CLUSTER_NAME = "task-management-cluster"
+        AWS_REGION   = "us-east-2"
     }
 
     stages {
@@ -18,28 +23,6 @@ pipeline {
                     branches: [[name: '*/main']],
                     userRemoteConfigs: [[url: 'https://github.com/kamalnathdhekwar/Task-Manager.git']]
                 ])
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                echo "⚙️ Installing Terraform, AWS CLI, and kubectl..."
-                sh '''
-                    if ! command -v terraform &> /dev/null; then
-                        curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-                        sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-                        sudo apt-get update && sudo apt-get install -y terraform
-                    fi
-                    
-                    if ! command -v aws &> /dev/null; then
-                        sudo apt-get install -y awscli
-                    fi
-
-                    if ! command -v kubectl &> /dev/null; then
-                        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                        chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-                    fi
-                '''
             }
         }
 
@@ -58,13 +41,15 @@ pipeline {
         stage('Configure AWS & EKS') {
             steps {
                 echo "⚙️ Configuring AWS access and EKS kubeconfig..."
-                sh '''
-                    aws configure set aws_access_key_id $AWS_CREDENTIALS_USR
-                    aws configure set aws_secret_access_key $AWS_CREDENTIALS_PSW
-                    aws configure set default.region $AWS_REGION
-
-                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
-                '''
+                withEnv([
+                    "AWS_ACCESS_KEY_ID=${AWS_CREDENTIALS_USR}",
+                    "AWS_SECRET_ACCESS_KEY=${AWS_CREDENTIALS_PSW}",
+                    "AWS_DEFAULT_REGION=${AWS_REGION}"
+                ]) {
+                    sh '''
+                        aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $CLUSTER_NAME
+                    '''
+                }
             }
         }
 
