@@ -1,4 +1,16 @@
+# Dependencies
 backend/node_modules/
 frontend/node_modules/
+
+# Environment files
 backend/.env
 frontend/.env
+
+# Terraform
+infra/terraform/eks/.terraform/
+infra/terraform/eks/.terraform.lock.hcl
+infra/terraform/eks/terraform.tfstate
+infra/terraform/eks/terraform.tfstate.backup
+infra/terraform/eks/.terraform.tfvars
+infra/terraform/eks/.terraform/providers/
+*.exe
