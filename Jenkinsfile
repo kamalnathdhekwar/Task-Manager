@@ -2,12 +2,19 @@ pipeline {
     agent any
 
     environment {
-        // Jenkins credentials IDs
+        // Docker Hub credentials from Jenkins
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
 
         // Docker images
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE  = "kamalnathd/task-backend"
+
+        // AWS & EKS details
+        AWS_REGION = "us-east-2"
+        CLUSTER_NAME = "task-management-cluster"
+
+        // Terraform directory
+        TF_DIR = "infra/terraform/eks"
     }
 
     stages {
@@ -18,6 +25,18 @@ pipeline {
                     branches: [[name: '*/main']],
                     userRemoteConfigs: [[url: 'https://github.com/kamalnathdhekwar/Task-Manager.git']]
                 ])
+            }
+        }
+
+        stage('Terraform Init & Apply') {
+            steps {
+                echo "🏗️ Setting up EKS infrastructure..."
+                dir("${TF_DIR}") {
+                    sh '''
+                        terraform init
+                        terraform apply -auto-approve
+                    '''
+                }
             }
         }
 
@@ -33,7 +52,7 @@ pipeline {
 
         stage('Scan Docker Images with Trivy') {
             steps {
-                echo "🧪 Scanning Docker images with Trivy..."
+                echo "🧪 Scanning Docker images..."
                 sh '''
                     mkdir -p trivy-reports
 
@@ -71,6 +90,25 @@ pipeline {
             }
         }
 
+        stage('Deploy to EKS') {
+            steps {
+                echo "🚀 Deploying to EKS cluster..."
+                sh '''
+                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+
+                    # Apply all manifests in k8s folder
+                    kubectl apply -f k8s/
+
+                    # Restart deployments to pick latest Docker Hub images
+                    kubectl rollout restart deployment backend-deployment
+                    kubectl rollout restart deployment frontend-deployment
+
+                    # Wait until all pods are ready
+                    kubectl get pods -o wide
+                '''
+            }
+        }
+
         stage('Archive Reports') {
             steps {
                 echo "📄 Archiving Trivy reports..."
@@ -81,10 +119,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Build, scan, and push completed successfully!'
+            echo '✅ Build, scan, push, and deploy completed successfully!'
         }
         failure {
-            echo '❌ Pipeline failed! Check logs and reports for details.'
+            echo '❌ Pipeline failed! Check logs for details.'
         }
     }
 }
