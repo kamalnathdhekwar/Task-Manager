@@ -99,16 +99,30 @@ pipeline {
         stage('Deploy to EKS') {
             steps {
                 echo "🚀 Deploying to EKS..."
-                sh '''
-                    cd k8s
-                    kubectl apply -f backend-deployment.yaml
-                    kubectl apply -f backend-service.yaml
-                    kubectl apply -f frontend-deployment.yaml
-                    kubectl apply -f frontend-service.yaml
+                withEnv([
+                    "AWS_ACCESS_KEY_ID=${AWS_CREDENTIALS_USR}",
+                    "AWS_SECRET_ACCESS_KEY=${AWS_CREDENTIALS_PSW}",
+                    "AWS_DEFAULT_REGION=${AWS_REGION}"
+                ]) {
+                    sh '''
+                        aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
 
-                    kubectl get pods -o wide
-                    kubectl get svc -o wide
-                '''
+                        echo "📦 Applying Kubernetes manifests..."
+                        kubectl apply -f k8s/ --validate=false
+
+                        echo "⏳ Waiting for rollouts..."
+                        kubectl rollout status deployment/backend-deployment
+                        kubectl rollout status deployment/frontend-deployment
+
+                        echo "🔍 Current Pods and Services:"
+                        kubectl get pods -o wide
+                        kubectl get svc -o wide
+
+                        echo "🌐 Frontend LoadBalancer URL:"
+                        kubectl get svc frontend-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                        echo ""
+                    '''
+                }
             }
         }
 
