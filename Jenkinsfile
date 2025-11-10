@@ -1,20 +1,18 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'hashicorp/terraform:1.9.8' // Terraform + Linux base image
+            args '-u root:root -v /var/run/docker.sock:/var/run/docker.sock' // for Docker access
+        }
+    }
 
     environment {
-        // Docker Hub credentials from Jenkins
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-
-        // Docker images
+        AWS_CREDENTIALS = credentials('aws-credentials') // Jenkins AWS creds ID
         FRONTEND_IMAGE = "kamalnathd/task-frontend"
         BACKEND_IMAGE  = "kamalnathd/task-backend"
-
-        // AWS & EKS details
-        AWS_REGION = "us-east-2"
-        CLUSTER_NAME = "task-management-cluster"
-
-        // Terraform directory
-        TF_DIR = "infra/terraform/eks"
+        CLUSTER_NAME   = "task-management-cluster"
+        AWS_REGION     = "us-east-2"
     }
 
     stages {
@@ -28,15 +26,28 @@ pipeline {
             }
         }
 
-        stage('Terraform Init & Apply') {
+        stage('Terraform Init & Apply (EKS Infra)') {
             steps {
                 echo "🏗️ Setting up EKS infrastructure..."
-                dir("${TF_DIR}") {
+                dir('infra/terraform/eks') {
                     sh '''
-                        terraform init
-                        terraform apply -auto-approve
+                        terraform init -input=false
+                        terraform apply -auto-approve -input=false
                     '''
                 }
+            }
+        }
+
+        stage('Configure AWS & EKS') {
+            steps {
+                echo "⚙️ Configuring AWS and EKS cluster access..."
+                sh '''
+                    apk add --no-cache aws-cli kubectl docker-cli bash curl
+                    aws configure set aws_access_key_id $AWS_CREDENTIALS_USR
+                    aws configure set aws_secret_access_key $AWS_CREDENTIALS_PSW
+                    aws configure set default.region $AWS_REGION
+                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+                '''
             }
         }
 
@@ -52,38 +63,28 @@ pipeline {
 
         stage('Scan Docker Images with Trivy') {
             steps {
-                echo "🧪 Scanning Docker images..."
+                echo "🧪 Scanning Docker images with Trivy..."
                 sh '''
                     mkdir -p trivy-reports
 
-                    docker run --rm \
-                      -v /var/run/docker.sock:/var/run/docker.sock \
-                      -v $WORKSPACE/trivy-reports:/reports \
-                      aquasec/trivy image $BACKEND_IMAGE:latest \
-                      --format table --output /reports/backend-report.txt
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v $WORKSPACE/trivy-reports:/reports \
+                        aquasec/trivy image $BACKEND_IMAGE:latest \
+                        --format table --output /reports/backend-report.txt
 
-                    docker run --rm \
-                      -v /var/run/docker.sock:/var/run/docker.sock \
-                      -v $WORKSPACE/trivy-reports:/reports \
-                      aquasec/trivy image $FRONTEND_IMAGE:latest \
-                      --format table --output /reports/frontend-report.txt
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v $WORKSPACE/trivy-reports:/reports \
+                        aquasec/trivy image $FRONTEND_IMAGE:latest \
+                        --format table --output /reports/frontend-report.txt
                 '''
             }
         }
 
-        stage('Login to Docker Hub') {
-            steps {
-                echo "🔐 Logging in to Docker Hub..."
-                sh '''
-                    echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin
-                '''
-            }
-        }
-
-        stage('Push Images to Docker Hub') {
+        stage('Login to Docker Hub & Push Images') {
             steps {
                 echo "☁️ Pushing images to Docker Hub..."
                 sh '''
+                    echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin
                     docker push $BACKEND_IMAGE:latest
                     docker push $FRONTEND_IMAGE:latest
                 '''
@@ -92,19 +93,17 @@ pipeline {
 
         stage('Deploy to EKS') {
             steps {
-                echo "🚀 Deploying to EKS cluster..."
+                echo "🚀 Deploying to EKS..."
                 sh '''
-                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+                    cd k8s
+                    kubectl apply -f backend-deployment.yaml
+                    kubectl apply -f backend-service.yaml
+                    kubectl apply -f frontend-deployment.yaml
+                    kubectl apply -f frontend-service.yaml
 
-                    # Apply all manifests in k8s folder
-                    kubectl apply -f k8s/
-
-                    # Restart deployments to pick latest Docker Hub images
-                    kubectl rollout restart deployment backend-deployment
-                    kubectl rollout restart deployment frontend-deployment
-
-                    # Wait until all pods are ready
+                    echo "✅ Deployment Completed!"
                     kubectl get pods -o wide
+                    kubectl get svc -o wide
                 '''
             }
         }
@@ -119,7 +118,7 @@ pipeline {
 
     post {
         success {
-            echo '✅ Build, scan, push, and deploy completed successfully!'
+            echo '✅ Pipeline completed successfully!'
         }
         failure {
             echo '❌ Pipeline failed! Check logs for details.'
