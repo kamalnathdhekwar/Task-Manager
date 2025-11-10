@@ -2,17 +2,12 @@ pipeline {
     agent any
 
     environment {
-        // Credentials
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        AWS_CREDENTIALS = credentials('aws-credentials')
-
-        // Docker images
-        FRONTEND_IMAGE = "kamalnathd/task-frontend"
-        BACKEND_IMAGE  = "kamalnathd/task-backend"
-
-        // EKS
-        CLUSTER_NAME = "task-management-cluster"
-        AWS_REGION   = "us-east-2"
+        AWS_CREDENTIALS       = credentials('aws-credentials')
+        FRONTEND_IMAGE        = "kamalnathd/task-frontend"
+        BACKEND_IMAGE         = "kamalnathd/task-backend"
+        CLUSTER_NAME          = "task-management-cluster"
+        AWS_REGION            = "us-east-2"
     }
 
     stages {
@@ -29,25 +24,31 @@ pipeline {
         stage('Terraform Init & Apply (EKS Infra)') {
             steps {
                 echo "🏗️ Setting up EKS infrastructure..."
-                dir('infra/terraform/eks') {
-                    sh '''
-                        terraform init -input=false
-                        terraform apply -auto-approve -input=false
-                    '''
+                withEnv([
+                    "AWS_ACCESS_KEY_ID=${AWS_CREDENTIALS_USR}",
+                    "AWS_SECRET_ACCESS_KEY=${AWS_CREDENTIALS_PSW}",
+                    "AWS_DEFAULT_REGION=${AWS_REGION}"
+                ]) {
+                    dir('infra/terraform/eks') {
+                        sh '''
+                            terraform init -input=false
+                            terraform apply -auto-approve -input=false
+                        '''
+                    }
                 }
             }
         }
 
         stage('Configure AWS & EKS') {
             steps {
-                echo "⚙️ Configuring AWS access and EKS kubeconfig..."
+                echo "⚙️ Configuring AWS CLI and EKS kubeconfig..."
                 withEnv([
                     "AWS_ACCESS_KEY_ID=${AWS_CREDENTIALS_USR}",
                     "AWS_SECRET_ACCESS_KEY=${AWS_CREDENTIALS_PSW}",
                     "AWS_DEFAULT_REGION=${AWS_REGION}"
                 ]) {
                     sh '''
-                        aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $CLUSTER_NAME
+                        aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
                     '''
                 }
             }
